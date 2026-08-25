@@ -36,7 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # ----------------------------------------------------------------------------
 # Cấu hình - đọc từ biến môi trường (Render tự set các biến này khi deploy).
@@ -169,6 +169,13 @@ class RegisterRequest(BaseModel):
     grant_types: list[str] | None = None
     response_types: list[str] | None = None
     scope: str | None = None
+
+    @field_validator("redirect_uris", mode="before")
+    @classmethod
+    def _redirect_uris_list(cls, value):
+        if isinstance(value, str):
+            return [value]
+        return value
 
 
 @app.post("/register", status_code=201)

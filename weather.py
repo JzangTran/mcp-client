@@ -44,14 +44,28 @@ from mcp.server.transport_security import TransportSecuritySettings
 # JWT_SECRET_KEY phải GIỐNG HỆT secret của auth_server.py (demo dùng HS256
 # chia sẻ secret; production nên dùng JWKS/RS256 để RS không cần biết secret).
 # ----------------------------------------------------------------------------
-AUTH_SERVER_URL = (
-    os.environ.get("AUTH_SERVER_URL") or "http://localhost:8000"
-).rstrip("/")
-_resource = os.environ.get("RESOURCE_SERVER_URL")
-if not _resource:
-    _ext = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+def _is_loopback(url: str) -> bool:
+    return (not url) or ("localhost" in url) or ("127.0.0.1" in url)
+
+
+# Trên Render, KHÔNG BAO GIỜ quảng bá localhost cho Claude: Claude chạy trên
+# cloud nên không mở được http://localhost:8000 (đúng lỗi "Couldn't register").
+_ON_RENDER = os.environ.get("RENDER") == "true" or bool(os.environ.get("RENDER_EXTERNAL_URL"))
+_AUTH_FALLBACK = "https://mcp-client-escy.onrender.com"
+
+AUTH_SERVER_URL = (os.environ.get("AUTH_SERVER_URL") or "").rstrip("/")
+if _ON_RENDER and _is_loopback(AUTH_SERVER_URL):
+    AUTH_SERVER_URL = (os.environ.get("ISSUER_URL") or _AUTH_FALLBACK).rstrip("/")
+elif not AUTH_SERVER_URL:
+    AUTH_SERVER_URL = "http://localhost:8000"
+
+_resource = (os.environ.get("RESOURCE_SERVER_URL") or "").rstrip("/")
+if not _resource or (_ON_RENDER and _is_loopback(_resource)):
+    _ext = (os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
     _resource = f"{_ext}/mcp" if _ext else "http://127.0.0.1:8001/mcp"
 RESOURCE_SERVER_URL = _resource.rstrip("/")
+print(f"[oauth] AUTH_SERVER_URL={AUTH_SERVER_URL}")
+print(f"[oauth] RESOURCE_SERVER_URL={RESOURCE_SERVER_URL}")
 SECRET_KEY = os.environ["JWT_SECRET_KEY"] if "JWT_SECRET_KEY" in os.environ else "dev-only-insecure-secret-change-me"
 ALGORITHM = "HS256"
 REQUIRED_SCOPES = ["weather:read"]

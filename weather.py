@@ -24,6 +24,7 @@ Chạy demo:
 
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import jwt
@@ -34,6 +35,7 @@ from mcp.server import MCPServer
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
+from mcp.server.transport_security import TransportSecuritySettings
 
 # ----------------------------------------------------------------------------
 # Cấu hình - đọc từ biến môi trường (Render set các biến này khi deploy).
@@ -84,10 +86,10 @@ class JWTTokenVerifier(TokenVerifier):
         )
 
 
+# host/port KHÔNG truyền vào constructor MCPServer (SDK v2 không nhận nữa),
+# mà truyền lúc chạy uvicorn ở cuối file.
 mcp = MCPServer(
     "weather",
-    host=HOST,
-    port=PORT,
     token_verifier=JWTTokenVerifier(),
     auth=AuthSettings(
         issuer_url=AnyHttpUrl(AUTH_SERVER_URL),
@@ -180,5 +182,20 @@ Forecast: {period["detailedForecast"]}
 
 
 if __name__ == "__main__":
-    # QUAN TRỌNG: OAuth chỉ hoạt động trên transport HTTP, không phải stdio
-    mcp.run(transport="streamable-http")
+    # QUAN TRỌNG #1: OAuth chỉ hoạt động trên transport HTTP, không phải stdio
+    # QUAN TRỌNG #2: SDK mặc định CHỈ chấp nhận Host header là localhost/127.0.0.1
+    #   (chống DNS-rebinding). Deploy lên hostname thật (Render) mà không khai
+    #   báo allowlist này thì MỌI request sẽ bị từ chối với lỗi:
+    #     421 Misdirected Request - Invalid Host header
+    #   (client chỉ thấy lỗi transport chung chung, chi tiết nằm trong log server).
+    resource_host = urlparse(RESOURCE_SERVER_URL).netloc  # ví dụ: mcp-weather-server.onrender.com
+
+    security = TransportSecuritySettings(
+        allowed_hosts=[resource_host, f"{resource_host}:*", "127.0.0.1:*", "localhost:*"],
+        allowed_origins=[f"https://{resource_host}"],
+    )
+    app = mcp.streamable_http_app(transport_security=security)
+
+    import uvicorn
+
+    uvicorn.run(app, host=HOST, port=PORT)

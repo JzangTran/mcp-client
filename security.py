@@ -32,6 +32,7 @@ from urllib.parse import urlencode
 
 import jwt
 from fastapi import FastAPI, Form, HTTPException, Query, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
@@ -41,7 +42,13 @@ from pydantic import BaseModel
 # Cấu hình - đọc từ biến môi trường (Render tự set các biến này khi deploy).
 # Local dev không set thì fallback về localhost để chạy `uv run uvicorn ...`.
 # ----------------------------------------------------------------------------
-ISSUER = os.environ.get("ISSUER_URL", "http://localhost:8000")
+# Render tự set RENDER_EXTERNAL_URL (https://xxx.onrender.com). Nếu quên ISSUER_URL
+# thì dùng cái đó — không thì Claude sẽ nhận issuer = localhost và DCR thất bại.
+ISSUER = (
+    os.environ.get("ISSUER_URL")
+    or os.environ.get("RENDER_EXTERNAL_URL")
+    or "http://localhost:8000"
+).rstrip("/")
 SECRET_KEY = os.environ["JWT_SECRET_KEY"] if "JWT_SECRET_KEY" in os.environ else "dev-only-insecure-secret-change-me"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
@@ -52,6 +59,18 @@ password_hash = PasswordHash.recommended()
 DUMMY_HASH = password_hash.hash("dummypassword")
 
 app = FastAPI(title="Demo MCP Authorization Server")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def health():
+    return {"status": "ok", "issuer": ISSUER}
 
 # ----------------------------------------------------------------------------
 # "Database" giả lập (demo only - production dùng DB thật)
@@ -142,9 +161,14 @@ async def authorization_server_metadata():
 # MCP client tự đăng ký (ngầm, user không thấy) lần đầu kết nối tới AS này
 # ----------------------------------------------------------------------------
 class RegisterRequest(BaseModel):
+    model_config = {"extra": "allow"}
+
     redirect_uris: list[str]
     client_name: str | None = None
     token_endpoint_auth_method: str = "none"
+    grant_types: list[str] | None = None
+    response_types: list[str] | None = None
+    scope: str | None = None
 
 
 @app.post("/register", status_code=201)

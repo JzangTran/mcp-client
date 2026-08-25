@@ -44,8 +44,14 @@ from mcp.server.transport_security import TransportSecuritySettings
 # JWT_SECRET_KEY phải GIỐNG HỆT secret của auth_server.py (demo dùng HS256
 # chia sẻ secret; production nên dùng JWKS/RS256 để RS không cần biết secret).
 # ----------------------------------------------------------------------------
-AUTH_SERVER_URL = os.environ.get("AUTH_SERVER_URL", "http://localhost:8000")
-RESOURCE_SERVER_URL = os.environ.get("RESOURCE_SERVER_URL", "http://127.0.0.1:8001/mcp")
+AUTH_SERVER_URL = (
+    os.environ.get("AUTH_SERVER_URL") or "http://localhost:8000"
+).rstrip("/")
+_resource = os.environ.get("RESOURCE_SERVER_URL")
+if not _resource:
+    _ext = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+    _resource = f"{_ext}/mcp" if _ext else "http://127.0.0.1:8001/mcp"
+RESOURCE_SERVER_URL = _resource.rstrip("/")
 SECRET_KEY = os.environ["JWT_SECRET_KEY"] if "JWT_SECRET_KEY" in os.environ else "dev-only-insecure-secret-change-me"
 ALGORITHM = "HS256"
 REQUIRED_SCOPES = ["weather:read"]
@@ -191,10 +197,41 @@ if __name__ == "__main__":
     resource_host = urlparse(RESOURCE_SERVER_URL).netloc  # ví dụ: mcp-weather-server.onrender.com
 
     security = TransportSecuritySettings(
-        allowed_hosts=[resource_host, f"{resource_host}:*", "127.0.0.1:*", "localhost:*"],
-        allowed_origins=[f"https://{resource_host}"],
+        allowed_hosts=[
+            resource_host,
+            resource_host.split(":")[0],
+            f"{resource_host}:*",
+            "127.0.0.1:*",
+            "localhost:*",
+        ],
+        allowed_origins=[
+            f"https://{resource_host.split(':')[0]}",
+            "https://claude.ai",
+            "https://www.claude.ai",
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+        ],
     )
     app = mcp.streamable_http_app(transport_security=security)
+
+    # Claude đôi khi gọi RFC 9728 không có suffix /mcp (404 trên SDK mặc định).
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def protected_resource_metadata(_request):
+        return JSONResponse(
+            {
+                "resource": RESOURCE_SERVER_URL,
+                "authorization_servers": [f"{AUTH_SERVER_URL}/"],
+                "scopes_supported": REQUIRED_SCOPES,
+                "bearer_methods_supported": ["header"],
+            }
+        )
+
+    app.router.routes.insert(
+        0,
+        Route("/.well-known/oauth-protected-resource", protected_resource_metadata),
+    )
 
     import uvicorn
 

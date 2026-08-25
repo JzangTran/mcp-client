@@ -23,7 +23,7 @@ services:
     startCommand: "uv run uvicorn security:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: ISSUER_URL
-        value: https://mcp-auth-server.onrender.com   # sửa lại sau khi có domain thật
+        value: https://mcp-client-escy.onrender.com
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: PYTHON_VERSION
@@ -37,9 +37,9 @@ services:
     startCommand: "uv run python weather.py"
     envVars:
       - key: AUTH_SERVER_URL
-        value: https://mcp-auth-server.onrender.com     # sửa lại sau khi có domain thật
+        value: https://mcp-client-escy.onrender.com
       - key: RESOURCE_SERVER_URL
-        value: https://mcp-weather-server.onrender.com/mcp  # sửa lại sau khi có domain thật
+        value: https://mcp-client-1-e2tu.onrender.com/mcp
       - key: JWT_SECRET_KEY
         sync: false   # copy tay giá trị JWT_SECRET_KEY từ service auth-server sang đây
       - key: PYTHON_VERSION

@@ -1,0 +1,46 @@
+# Render Blueprint - deploy cả Authorization Server và MCP Resource Server
+# Cách dùng:
+#   0. Chạy `uv lock` ở máy bạn TRƯỚC (tạo file uv.lock), rồi commit uv.lock
+#      cùng repo - buildCommand dưới dùng `--frozen` nên bắt buộc phải có
+#      uv.lock, nếu không sẽ build lỗi trên Render.
+#   1. Push code (kèm file này + uv.lock) lên GitHub repo.
+#   2. Vào Render Dashboard -> New -> Blueprint -> chọn repo.
+#   3. Render tự đọc file này, tạo 2 web service cùng lúc.
+#   4. Sau khi có URL thật của cả 2 service, vào phần "Environment" của mỗi
+#      service, cập nhật lại ISSUER_URL / AUTH_SERVER_URL / RESOURCE_SERVER_URL
+#      cho khớp domain Render vừa cấp (dạng https://xxx.onrender.com), vì lúc
+#      build lần đầu chưa biết trước domain.
+#   5. JWT_SECRET_KEY: bấm "Generate" trên Render để nó tự tạo secret ngẫu
+#      nhiên - PHẢI giống nhau giữa 2 service (copy value từ service này
+#      sang service kia), vì demo dùng HS256 shared secret.
+
+services:
+  - type: web
+    name: mcp-auth-server
+    runtime: python
+    plan: free
+    buildCommand: "pip install uv && uv sync --frozen"
+    startCommand: "uv run uvicorn auth_server:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: ISSUER_URL
+        value: https://mcp-auth-server.onrender.com   # sửa lại sau khi có domain thật
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.12"
+
+  - type: web
+    name: mcp-weather-server
+    runtime: python
+    plan: free
+    buildCommand: "pip install uv && uv sync --frozen"
+    startCommand: "uv run python weather_mcp_server.py"
+    envVars:
+      - key: AUTH_SERVER_URL
+        value: https://mcp-auth-server.onrender.com     # sửa lại sau khi có domain thật
+      - key: RESOURCE_SERVER_URL
+        value: https://mcp-weather-server.onrender.com/mcp  # sửa lại sau khi có domain thật
+      - key: JWT_SECRET_KEY
+        sync: false   # copy tay giá trị JWT_SECRET_KEY từ service auth-server sang đây
+      - key: PYTHON_VERSION
+        value: "3.12"

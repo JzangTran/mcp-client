@@ -202,7 +202,7 @@ async def authorize_page(
         <h2>{client['client_name']} muốn kết nối</h2>
         <p>Ứng dụng yêu cầu quyền: <b>{scope}</b> trên <code>{resource}</code></p>
         <form method="post" action="/authorize">
-          <input type="hidden" name="_qs" value="{hidden_fields}" />
+          <input type="hidden" name="auth_params" value="{hidden_fields}" />
           <input name="username" placeholder="Username" style="display:block;margin:8px 0;width:100%" />
           <input name="password" type="password" placeholder="Password" style="display:block;margin:8px 0;width:100%" />
           <button type="submit">Login & Allow</button>
@@ -216,11 +216,11 @@ async def authorize_page(
 async def authorize_submit(
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
-    _qs: Annotated[str, Form()],
+    auth_params: Annotated[str, Form()],
 ):
     from urllib.parse import parse_qsl
 
-    params = dict(parse_qsl(_qs))
+    params = dict(parse_qsl(auth_params))
     user = authenticate_user(username, password)
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sai username hoặc password")
